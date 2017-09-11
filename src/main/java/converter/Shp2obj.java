@@ -1,4 +1,4 @@
-package org.geotools.converter;
+package converter;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -81,7 +81,7 @@ public class Shp2obj {
       String groundFace = "f";
       String roofFace = "f";
 
-      int i = 0;
+      int i;
       for (i = 0; i<coordinates.length; i++) {
         Coordinate c = coordinates[i];
         result=result+coordinateToVertexdescription(c)+coordinateToVertexdescription(createLiftedCoordinate(c, height));
