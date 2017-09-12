@@ -8,6 +8,7 @@ import java.io.OutputStreamWriter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
@@ -53,7 +54,7 @@ public class Shp2obj {
 
     try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
         new FileOutputStream("output.obj"), "utf-8"))) {
-      writer.write("# Simple Wavefront file\n");
+      writer.write("mtllib material.mtl\n");
 
       FeatureCollection<SimpleFeatureType, SimpleFeature> collection = source.getFeatures(filter);
 
@@ -69,6 +70,7 @@ public class Shp2obj {
   }
 
     public static String featureToObjGroup(SimpleFeature feature){
+      //System.out.println(feature.getIdentifier().getID());
       GeometryAttribute featureDefaultGeometryProperty = feature.getDefaultGeometryProperty();
       MultiPolygon multipolygon = (MultiPolygon) featureDefaultGeometryProperty.getValue();
       Coordinate[] coordinates = deleteInnerPoints(multipolygon.getCoordinates());
@@ -81,8 +83,8 @@ public class Shp2obj {
         height = defaultHeight;
       }
 
-      String result= "";
-      String groundFace = "f";
+      String result= "o "+feature.getID()+"\nusemtl Building_"+getRandomIntWithRange(1, 10)+"\n";
+      //String groundFace = "f";
       String roofFace = "f";
 
       int i;
@@ -134,8 +136,8 @@ public class Shp2obj {
       Coordinate localBottomLeftCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMinX(), boundingBox.getMinY(), 0));
       Coordinate localUpperRightCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMaxX(), boundingBox.getMaxY(), 0));
       Coordinate localBottomRightCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMaxX(), boundingBox.getMinY(), 0));
-
-      String result = coordinateToVertexdescription(localUpperLeftCorner)+coordinateToVertexdescription(localBottomLeftCorner)+coordinateToVertexdescription(localUpperRightCorner)+coordinateToVertexdescription(localBottomRightCorner);
+      String result= "o ground"+"\nusemtl Terrain\n";
+      result = result + coordinateToVertexdescription(localUpperLeftCorner)+coordinateToVertexdescription(localBottomLeftCorner)+coordinateToVertexdescription(localUpperRightCorner)+coordinateToVertexdescription(localBottomRightCorner);
       return result+"f -1 -2 -4 -3\n";
     }
 
@@ -156,6 +158,11 @@ public class Shp2obj {
 
     public static Coordinate scaleCoordinateToLocalCoordinateSystem(Coordinate coordinate){
       return new Coordinate(coordinate.x* scaleFactor, coordinate.y* scaleFactor, coordinate.z* scaleFactor);
+    }
+
+    public static int getRandomIntWithRange(int lowerBound, int upperBound) {
+      Random generator = new Random();
+      return generator.nextInt(upperBound-lowerBound) + lowerBound +1;
     }
 
   }
