@@ -31,6 +31,9 @@ import com.vividsolutions.jts.geom.Polygon;
 public class Shp2obj {
 
   public static double defaultHeight = 5;
+  public static double globalMinX;
+  public static double globalMinY;
+  public static double scaleFactor;
 
   public static void main(String[] args) throws Exception {
     //File file = JFileDataStoreChooser.showOpenFile("shp", null);
@@ -55,6 +58,7 @@ public class Shp2obj {
       FeatureCollection<SimpleFeatureType, SimpleFeature> collection = source.getFeatures(filter);
 
       try (FeatureIterator<SimpleFeature> features = collection.features()) {
+        initShapefileCoordinateSystemBoundaries(collection);
         while (features.hasNext()) {
           SimpleFeature feature = features.next();
           writer.write(featureToObjGroup(feature));
@@ -84,7 +88,7 @@ public class Shp2obj {
       int i;
       for (i = 0; i<coordinates.length; i++) {
         Coordinate c = coordinates[i];
-        result=result+coordinateToVertexdescription(c)+coordinateToVertexdescription(createLiftedCoordinate(c, height));
+        result=result+coordinateToVertexdescription(toLocalCoordinateSystem(c))+coordinateToVertexdescription(toLocalCoordinateSystem(createLiftedCoordinate(c, height)));
         //Create face between four previous created vertices (=wall)
         if (i>0) {
           result=result+"f -1 -2 -4 -3 \n";
@@ -97,7 +101,8 @@ public class Shp2obj {
         result = result+"f -1 -2 -"+(2*i)+" -"+(2*i-1)+"\n";
       }
       //result=result+groundFace+"\n"+roofFace+"\n";
-      result=result+"\n"+roofFace+"\n";
+      result=result+roofFace+"\n";
+      System.out.print(result);
       return result;
     }
 
@@ -125,14 +130,32 @@ public class Shp2obj {
     public static String groundBoundariesToObj(FeatureCollection collection) {
 
       BoundingBox boundingBox = collection.getBounds();
-      Coordinate upperLeftCorner = new Coordinate(boundingBox.getMinX(), boundingBox.getMaxY(), 0);
-      Coordinate bottomLeftCorner = new Coordinate(boundingBox.getMinX(), boundingBox.getMinY(), 0);
-      Coordinate upperRightCorner = new Coordinate(boundingBox.getMaxX(), boundingBox.getMaxY(), 0);
-      Coordinate bottomRightCorner = new Coordinate(boundingBox.getMaxX(), boundingBox.getMinY(), 0);
+      Coordinate localUpperLeftCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMinX(), boundingBox.getMaxY(), 0));
+      Coordinate localBottomLeftCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMinX(), boundingBox.getMinY(), 0));
+      Coordinate localUpperRightCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMaxX(), boundingBox.getMaxY(), 0));
+      Coordinate localBottomRightCorner = toLocalCoordinateSystem(new Coordinate(boundingBox.getMaxX(), boundingBox.getMinY(), 0));
 
-      String result = coordinateToVertexdescription(upperLeftCorner)+coordinateToVertexdescription(bottomLeftCorner)+coordinateToVertexdescription(upperRightCorner)+coordinateToVertexdescription(bottomRightCorner);
+      String result = coordinateToVertexdescription(localUpperLeftCorner)+coordinateToVertexdescription(localBottomLeftCorner)+coordinateToVertexdescription(localUpperRightCorner)+coordinateToVertexdescription(localBottomRightCorner);
       return result+"f -1 -2 -4 -3\n";
     }
 
+  public static void initShapefileCoordinateSystemBoundaries(FeatureCollection collection) {
+    BoundingBox boundingBox = collection.getBounds();
+    globalMinX = boundingBox.getMinX();
+    globalMinY = boundingBox.getMinY();
+    scaleFactor = 100/boundingBox.getWidth(); //For a local CS with x-values between 0 and 100
+  }
+
+    public static Coordinate toLocalCoordinateSystem(Coordinate coordinate) {
+      return scaleCoordinateToLocalCoordinateSystem(translateCoordinateToLocalCoordinateSystem(coordinate));
+    }
+
+    public static Coordinate translateCoordinateToLocalCoordinateSystem(Coordinate coordinate){
+      return new Coordinate(coordinate.x-globalMinX, coordinate.y-globalMinY, coordinate.z);
+    }
+
+    public static Coordinate scaleCoordinateToLocalCoordinateSystem(Coordinate coordinate){
+      return new Coordinate(coordinate.x* scaleFactor, coordinate.y* scaleFactor, coordinate.z* scaleFactor);
+    }
 
   }
