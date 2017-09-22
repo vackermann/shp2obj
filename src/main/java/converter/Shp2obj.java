@@ -29,6 +29,8 @@ import com.vividsolutions.jts.geom.Polygon;
 
 /**
  * Created by vanessa on 31.08.17.
+ *
+ * Contains public sector information licensed under the Open Government Licence v3.0. (http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
  */
 public class Shp2obj {
 
