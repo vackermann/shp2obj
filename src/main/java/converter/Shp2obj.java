@@ -23,6 +23,7 @@ import org.opengis.filter.Filter;
 import org.opengis.geometry.BoundingBox;
 
 import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.MultiLineString;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Polygon;
 
@@ -38,53 +39,66 @@ public class Shp2obj {
 
   public static void main(String[] args) throws Exception {
     //File file = JFileDataStoreChooser.showOpenFile("shp", null);
-    File file = new File("data/TL_building_clipped.shp");
-    if (!file.exists()) {
-      throw new FileNotFoundException("Failed to find file: " + file.getAbsolutePath());
-    }
-    Map<String, Object> map = new HashMap<>();
-    map.put("url", file.toURI().toURL());
-
-    DataStore dataStore = DataStoreFinder.getDataStore(map);
-    String typeName = dataStore.getTypeNames()[0];
-    System.out.println(typeName);
-
-    FeatureSource<SimpleFeatureType, SimpleFeature> source = dataStore.getFeatureSource(typeName);
+    File buildingFile = new File("data/TL_building_clipped.shp");
+    File woodlandFile = new File("data/TL_woodland_clipped.shp");
     Filter filter = Filter.INCLUDE; // ECQL.toFilter("BBOX(THE_GEOM, 10,20,30,40)")
 
     try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
         new FileOutputStream("output.obj"), "utf-8"))) {
       writer.write("mtllib material.mtl\n");
 
-      FeatureCollection<SimpleFeatureType, SimpleFeature> collection = source.getFeatures(filter);
+      FeatureCollection<SimpleFeatureType, SimpleFeature> buildingCollection = getFeatureCollectionFromFileWithFilter(buildingFile, filter);
+      FeatureCollection<SimpleFeatureType, SimpleFeature> woodlandCollection = getFeatureCollectionFromFileWithFilter(woodlandFile, filter);
 
-      try (FeatureIterator<SimpleFeature> features = collection.features()) {
-        initShapefileCoordinateSystemBoundaries(collection);
+      try (FeatureIterator<SimpleFeature> features = buildingCollection.features()) {
+        initShapefileCoordinateSystemBoundaries(buildingCollection);
         while (features.hasNext()) {
           SimpleFeature feature = features.next();
-          writer.write(featureToObjGroup(feature));
+          writer.write(buildingFeatureToObjGroup(feature));
         }
       }
-      writer.write(groundBoundariesToObj(collection));
+      try (FeatureIterator<SimpleFeature> features = woodlandCollection.features()) {
+        while (features.hasNext()) {
+          SimpleFeature feature = features.next();
+          writer.write(woodlandFeatureToObjGroup(feature));
+        }
+      }
+      writer.write(groundBoundariesToObj(buildingCollection));
     }
   }
 
-    public static String featureToObjGroup(SimpleFeature feature){
-      //System.out.println(feature.getIdentifier().getID());
+    public static FeatureCollection<SimpleFeatureType, SimpleFeature> getFeatureCollectionFromFileWithFilter(File file, Filter filter) throws Exception{
+      if (!file.exists()) {
+        throw new FileNotFoundException("Failed to find file: " + file.getAbsolutePath());
+      }
+
+      Map<String, Object> map = new HashMap<>();
+      map.put("url", file.toURI().toURL());
+
+      DataStore dataStore = DataStoreFinder.getDataStore(map);
+      String typeName = dataStore.getTypeNames()[0];
+      System.out.println(typeName);
+
+      FeatureSource<SimpleFeatureType, SimpleFeature> source = dataStore.getFeatureSource(typeName);
+      FeatureCollection<SimpleFeatureType, SimpleFeature> collection = source.getFeatures(filter);
+      return collection;
+    }
+
+    public static String buildingFeatureToObjGroup(SimpleFeature feature){
       GeometryAttribute featureDefaultGeometryProperty = feature.getDefaultGeometryProperty();
       MultiPolygon multipolygon = (MultiPolygon) featureDefaultGeometryProperty.getValue();
       Coordinate[] coordinates = deleteInnerPoints(multipolygon.getCoordinates());
 
       Polygon poly = (Polygon)multipolygon.getGeometryN(0);
-      Coordinate[] coords = poly.getExteriorRing().getCoordinates();
+      //Coordinate[] coords = poly.getExteriorRing().getCoordinates();
 
+      //TODO: What if there is no _mean attribute available?
       double height = (double) feature.getAttribute("_mean");
       if (height<1) {
         height = defaultHeight;
       }
 
       String result= "o "+feature.getID()+"\nusemtl Building_"+getRandomIntWithRange(1, 10)+"\n";
-      //String groundFace = "f";
       String roofFace = "f";
 
       int i;
@@ -95,18 +109,49 @@ public class Shp2obj {
         if (i>0) {
           result=result+"f -1 -2 -4 -3 \n";
         }
-        //groundFace += " -"+(2*i+2); //-2 -4 ....
         roofFace += " -"+(2*i+1); //-1 -3 ...
       }
       //Add face between first and last two created vertices (=wall)
       if (i>=4) {
         result = result+"f -1 -2 -"+(2*i)+" -"+(2*i-1)+"\n";
       }
-      //result=result+groundFace+"\n"+roofFace+"\n";
       result=result+roofFace+"\n";
-      System.out.print(result);
       return result;
     }
+
+  public static String roadFeatureToObjGroup(SimpleFeature feature){
+    GeometryAttribute featureDefaultGeometryProperty = feature.getDefaultGeometryProperty();
+    MultiLineString multiLineString = (MultiLineString) featureDefaultGeometryProperty.getValue();
+    return null;
+  }
+
+  public static String woodlandFeatureToObjGroup(SimpleFeature feature){
+    GeometryAttribute featureDefaultGeometryProperty = feature.getDefaultGeometryProperty();
+    MultiPolygon multipolygon = (MultiPolygon) featureDefaultGeometryProperty.getValue();
+    Coordinate[] coordinates = deleteInnerPoints(multipolygon.getCoordinates());
+
+    double height = 1;
+
+    String result= "o "+feature.getID()+"\nusemtl Woodland\n";
+    String roofFace = "f";
+
+    int i;
+    for (i = 0; i<coordinates.length; i++) {
+      Coordinate c = coordinates[i];
+      result=result+coordinateToVertexdescription(toLocalCoordinateSystem(c))+coordinateToVertexdescription(toLocalCoordinateSystem(createLiftedCoordinate(c, height)));
+      //Create face between four previous created vertices (=wall)
+      if (i>0) {
+        result=result+"f -1 -2 -4 -3 \n";
+      }
+      roofFace += " -"+(2*i+1); //-1 -3 ...
+    }
+    //Add face between first and last two created vertices (=wall)
+    if (i>=4) {
+      result = result+"f -1 -2 -"+(2*i)+" -"+(2*i-1)+"\n";
+    }
+    result=result+roofFace+"\n";
+    return result;
+  }
 
     public static Coordinate createLiftedCoordinate(Coordinate coordinate, double height) {
       return new Coordinate(coordinate.x, coordinate.y, height);
